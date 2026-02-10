@@ -148,7 +148,9 @@ function renderChart(stats) {
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: '#111',
+          backgroundColor: () => getComputedStyle(document.documentElement).getPropertyValue('--tooltip-bg').trim(),
+          titleColor: () => getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim(),
+          bodyColor: () => getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim(),
           titleFont: { family: 'Share Tech Mono' },
           bodyFont: { family: 'Share Tech Mono' },
         },
@@ -268,6 +270,21 @@ document.getElementById('project-search').addEventListener('input', (e) => {
     const folder = item.dataset.folder.toLowerCase();
     item.classList.toggle('hidden', query && !name.includes(query) && !folder.includes(query));
   });
+});
+
+// Theme toggle — init handled by inline script in <head> to prevent flash
+document.getElementById('theme-toggle').addEventListener('click', () => {
+  const root = document.documentElement;
+  const next = root.getAttribute('data-theme') === 'light' ? '' : 'light';
+  if (next) {
+    root.setAttribute('data-theme', next);
+    localStorage.setItem('lain-theme', next);
+  } else {
+    root.removeAttribute('data-theme');
+    localStorage.removeItem('lain-theme');
+  }
+  // Re-render chart so tooltip colors pick up new vars
+  if (state.statsData) renderChart(state.statsData);
 });
 
 // Sidebar resize

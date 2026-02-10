@@ -7,6 +7,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
+  <script>/* Apply saved theme before paint to prevent flash */
+  (function(){var t=localStorage.getItem('lain-theme');if(t)document.documentElement.setAttribute('data-theme',t)})();
+  </script>
 </head>
 <body>
   <div class="scanline-overlay"></div>
@@ -14,6 +17,9 @@
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <h1 class="logo" data-text="lain-code">lain-code</h1>
+      <button class="theme-toggle" id="theme-toggle" title="Toggle theme">
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      </button>
     </div>
     <div class="sidebar-section">
       <div class="sidebar-section-header">
