@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.claude/
+*.env
+.env*
+*.pem
+*.key
+*.secret
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+codex-report-*.md

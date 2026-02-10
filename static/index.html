@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>lain-code</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="scanline-overlay"></div>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <h1 class="logo" data-text="lain-code">lain-code</h1>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-header">
+        <span>PROJECTS</span>
+        <span class="badge" id="project-count">0</span>
+      </div>
+      <input type="text" class="project-search" id="project-search" placeholder="Search projects...">
+      <div class="toggle-btns">
+        <button class="toggle-all-btn" id="select-all">Select All</button>
+        <button class="toggle-all-btn" id="deselect-all">Deselect All</button>
+      </div>
+      <div class="project-list" id="project-list"></div>
+    </div>
+    <div class="sidebar-resize" id="sidebar-resize"></div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="date-presets">
+        <button class="preset-btn" data-preset="all">All Time</button>
+        <button class="preset-btn active" data-preset="today">Today</button>
+        <button class="preset-btn" data-preset="yesterday">Yesterday</button>
+        <button class="preset-btn" data-preset="7d">7d</button>
+        <button class="preset-btn" data-preset="30d">30d</button>
+        <button class="preset-btn" data-preset="custom">Custom</button>
+      </div>
+      <div class="date-custom" id="date-custom">
+        <label>From <input type="date" id="date-start"></label>
+        <label>To <input type="date" id="date-end"></label>
+        <button class="apply-btn" id="apply-dates">Apply</button>
+      </div>
+      <button class="sidebar-toggle" id="sidebar-toggle">&#9776;</button>
+    </div>
+
+    <div class="content">
+      <div class="stat-cards" id="stat-cards">
+        <div class="stat-card" style="animation-delay:0s">
+          <span class="stat-label">API Calls</span>
+          <span class="stat-value green" id="stat-calls">-</span>
+        </div>
+        <div class="stat-card" style="animation-delay:0.1s">
+          <span class="stat-label">Sessions</span>
+          <span class="stat-value green" id="stat-sessions">-</span>
+        </div>
+        <div class="stat-card" style="animation-delay:0.2s">
+          <span class="stat-label">Input Tokens</span>
+          <span class="stat-value green" id="stat-input">-</span>
+        </div>
+        <div class="stat-card" style="animation-delay:0.3s">
+          <span class="stat-label">Output Tokens</span>
+          <span class="stat-value green" id="stat-output">-</span>
+        </div>
+        <div class="stat-card" style="animation-delay:0.4s">
+          <span class="stat-label" title="Estimated value at Anthropic API rates — not actual spend on Max plan">API Value</span>
+          <span class="stat-value red" id="stat-cost">-</span>
+        </div>
+      </div>
+
+      <div class="chart-section">
+        <div class="chart-container">
+          <canvas id="model-chart"></canvas>
+        </div>
+        <div class="chart-legend" id="chart-legend"></div>
+      </div>
+
+      <div class="table-section">
+        <div class="table-wrap">
+          <table id="sessions-table">
+            <thead>
+              <tr>
+                <th data-col="date">Date <span class="sort-arrow"></span></th>
+                <th data-col="project">Project <span class="sort-arrow"></span></th>
+                <th data-col="title">Title <span class="sort-arrow"></span></th>
+                <th data-col="models">Models <span class="sort-arrow"></span></th>
+                <th data-col="api_calls">API Calls <span class="sort-arrow"></span></th>
+                <th data-col="input_tokens">Input <span class="sort-arrow"></span></th>
+                <th data-col="output_tokens">Output <span class="sort-arrow"></span></th>
+                <th data-col="cache_read_tokens">Cache Read <span class="sort-arrow"></span></th>
+                <th data-col="cache_create_tokens">Cache Create <span class="sort-arrow"></span></th>
+                <th data-col="cost">API Value <span class="sort-arrow"></span></th>
+              </tr>
+            </thead>
+            <tbody id="sessions-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
