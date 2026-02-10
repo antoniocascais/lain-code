@@ -11,7 +11,10 @@ Parses JSONL conversation logs from `~/.claude/projects/` and serves a web UI wi
 - **Date range filtering** — presets (today, 7d, 30d) or custom range
 - **Sortable sessions table** — all metrics per session
 
-Dark CRT aesthetic inspired by Serial Experiments Lain.
+CRT aesthetic inspired by Serial Experiments Lain, with dark and light themes.
+
+![Dark theme](https://github.com/user-attachments/assets/f04156ab-2afb-49a5-93bc-069c25ced1a1)
+![Light theme](https://github.com/user-attachments/assets/4f29b658-9676-4131-8d96-8dd054389666)
 
 ## Quick start
 
