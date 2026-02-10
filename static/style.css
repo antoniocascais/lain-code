@@ -235,6 +235,12 @@ body {
   color: var(--accent-green);
 }
 
+.toggle-all-btn.active {
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+  box-shadow: var(--glow-green);
+}
+
 .project-list { display: flex; flex-direction: column; gap: 2px; }
 
 .project-item {

@@ -90,6 +90,10 @@ async function fetchProjects() {
     });
   });
 
+  // Restore claude toggle from previous session
+  if (localStorage.getItem('lain-hide-claude') === '1') {
+    applyClaudeToggle(true);
+  }
 }
 
 async function fetchStats() {
@@ -212,6 +216,7 @@ function renderTable(sessions) {
 // Event listeners — select/deselect all buttons (user requested split)
 function setAllProjects(selected) {
   document.querySelectorAll('.project-item').forEach(item => {
+    if (item.classList.contains('hidden')) return;
     const cb = item.querySelector('input');
     cb.checked = selected;
     if (selected) {
@@ -224,6 +229,42 @@ function setAllProjects(selected) {
   });
   fetchStats();
 }
+
+function updateProjectCount() {
+  const visible = document.querySelectorAll('.project-item:not(.hidden)').length;
+  document.getElementById('project-count').textContent = visible;
+}
+
+function applyClaudeToggle(active) {
+  const btn = document.getElementById('hide-claude');
+  btn.classList.toggle('active', active);
+  document.querySelectorAll('.project-item').forEach(item => {
+    const folder = item.dataset.folder;
+    if (folder.startsWith('-home-') && folder.includes('--claude')) {
+      item.classList.toggle('hidden', active);
+      if (active) {
+        // Deselect hidden items
+        const cb = item.querySelector('input');
+        cb.checked = false;
+        state.selectedProjects.delete(folder);
+        item.classList.remove('active');
+      }
+    }
+  });
+  updateProjectCount();
+}
+
+document.getElementById('hide-claude').addEventListener('click', () => {
+  const btn = document.getElementById('hide-claude');
+  const nowActive = !btn.classList.contains('active');
+  applyClaudeToggle(nowActive);
+  if (nowActive) {
+    localStorage.setItem('lain-hide-claude', '1');
+  } else {
+    localStorage.removeItem('lain-hide-claude');
+  }
+  fetchStats();
+});
 
 document.getElementById('select-all').addEventListener('click', () => setAllProjects(true));
 document.getElementById('deselect-all').addEventListener('click', () => setAllProjects(false));
@@ -262,14 +303,18 @@ document.getElementById('sidebar-toggle').addEventListener('click', () => {
   document.getElementById('sidebar').classList.toggle('open');
 });
 
-// Project search
+// Project search — respects claude toggle
 document.getElementById('project-search').addEventListener('input', (e) => {
   const query = e.target.value.toLowerCase();
+  const claudeHidden = document.getElementById('hide-claude').classList.contains('active');
   document.querySelectorAll('.project-item').forEach(item => {
     const name = item.querySelector('.name').textContent.toLowerCase();
     const folder = item.dataset.folder.toLowerCase();
-    item.classList.toggle('hidden', query && !name.includes(query) && !folder.includes(query));
+    const matchesSearch = !query || name.includes(query) || folder.includes(query);
+    const isClaude = folder.startsWith('-home-') && folder.includes('--claude');
+    item.classList.toggle('hidden', !matchesSearch || (claudeHidden && isClaude));
   });
+  updateProjectCount();
 });
 
 // Theme toggle — init handled by inline script in <head> to prevent flash
