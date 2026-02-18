@@ -5,7 +5,7 @@ RUN groupadd -r lain && useradd -r -g lain -d /app lain
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py parse_models.py ./
+COPY app.py parse_models.py test_pricing.py ./
 COPY static/ static/
 
 USER lain

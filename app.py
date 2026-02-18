@@ -16,13 +16,20 @@ app = FastAPI()
 DATA_DIR = os.environ.get("LAIN_DATA_DIR", os.path.expanduser("~/.claude/projects"))
 
 # Per 1M tokens: (input, output, cache_read, cache_create)
+# Source: https://docs.anthropic.com/en/docs/about-claude/models#model-pricing
 MODEL_PRICING = {
-    "claude-opus-4-6":            (15,  75, 1.5,  18.75),
-    "claude-opus-4-5-20251101":   (15,  75, 1.5,  18.75),
-    "claude-sonnet-4-5-20250929": (3,   15, 0.3,  3.75),
-    "claude-sonnet-4-20250514":   (3,   15, 0.3,  3.75),
-    "claude-haiku-4-5-20251001":  (1,    5, 0.1,  1.25),
-    "claude-haiku-3-5-20241022":  (0.8,  4, 0.08, 1.0),
+    "claude-opus-4-6":   (5,    25, 0.5,  6.25),
+    "claude-opus-4-5":   (5,    25, 0.5,  6.25),
+    "claude-opus-4-1":   (15,   75, 1.5,  18.75),
+    "claude-opus-4":     (15,   75, 1.5,  18.75),
+    "claude-sonnet-4-6": (3,    15, 0.3,  3.75),
+    "claude-sonnet-4-5": (3,    15, 0.3,  3.75),
+    "claude-sonnet-4":   (3,    15, 0.3,  3.75),
+    "claude-sonnet-3-7": (3,    15, 0.3,  3.75),
+    "claude-haiku-4-5":  (1,     5, 0.1,  1.25),
+    "claude-haiku-3-5":  (0.8,   4, 0.08, 1.0),
+    "claude-opus-3":     (15,   75, 1.5,  18.75),
+    "claude-haiku-3":    (0.25, 1.25, 0.03, 0.3),
 }
 FALLBACK_PRICING = (3, 15, 0.3, 3.75)
 
@@ -69,8 +76,18 @@ def friendly_name(cwd: str | None, folder: str) -> str:
     return path or folder
 
 
+def _lookup_pricing(model: str):
+    """Match model ID to pricing, stripping date suffixes if needed."""
+    if model in MODEL_PRICING:
+        return MODEL_PRICING[model]
+    for key in MODEL_PRICING:
+        if model.startswith(key):
+            return MODEL_PRICING[key]
+    return FALLBACK_PRICING
+
+
 def estimate_cost(input_t: int, output_t: int, cache_read: int, cache_create: int, model: str) -> float:
-    p = MODEL_PRICING.get(model, FALLBACK_PRICING)
+    p = _lookup_pricing(model)
     return (
         input_t * p[0] / 1_000_000
         + output_t * p[1] / 1_000_000
