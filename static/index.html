@@ -112,7 +112,33 @@
     </div>
   </main>
 
+  <!-- Session detail side panel -->
+  <div class="session-panel" id="session-panel">
+    <div class="session-panel-header">
+      <button class="session-panel-close" id="session-panel-close">&times;</button>
+      <div class="session-panel-title">
+        <span class="session-panel-name" id="sp-name">Session</span>
+        <span class="session-panel-meta" id="sp-meta"></span>
+      </div>
+      <div class="session-panel-controls">
+        <label><input type="checkbox" id="sp-auto-scroll" checked> Auto-scroll</label>
+        <label><input type="checkbox" id="sp-show-thinking"> Thinking</label>
+        <label><input type="checkbox" id="sp-show-tool-results" checked> Tool results</label>
+        <select id="sp-filter-type">
+          <option value="all">All events</option>
+          <option value="assistant">Assistant only</option>
+          <option value="user">User only</option>
+          <option value="tools">Tool calls only</option>
+        </select>
+      </div>
+    </div>
+    <div class="session-panel-summary" id="sp-summary"></div>
+    <div class="session-panel-events" id="sp-events"></div>
+  </div>
+  <div class="session-panel-overlay" id="session-panel-overlay"></div>
+
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="/static/app.js"></script>
+  <script src="/static/session.js"></script>
 </body>
 </html>

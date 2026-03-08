@@ -2,12 +2,10 @@
 
 import os
 import json
-import glob
-from datetime import datetime
 from collections import defaultdict
 from pathlib import Path
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
@@ -165,6 +163,7 @@ def parse_session(filepath: str) -> dict | None:
         "cache_read_tokens": cache_read,
         "cache_create_tokens": cache_create,
         "cost": round(cost, 4),
+        "filepath": filepath,
     }
 
 
@@ -245,6 +244,11 @@ def get_stats(
 
             session["project"] = display_name
             session["project_folder"] = folder
+            # Store path relative to DATA_DIR for the events API
+            try:
+                session["filepath"] = str(Path(session["filepath"]).relative_to(base))
+            except ValueError:
+                pass
             sessions_list.append(session)
 
     sessions_list.sort(key=lambda s: s.get("first_ts") or "", reverse=True)
@@ -261,6 +265,40 @@ def get_stats(
         "cost": round(total_cost, 2),
         "sessions_list": sessions_list,
     }
+
+
+@app.get("/api/session/events")
+def get_session_events(
+    file: str = Query(..., description="JSONL file path relative to data dir"),
+    after: int = Query(0, description="Return events after this line number"),
+):
+    base = Path(DATA_DIR).resolve()
+    filepath = (base / file).resolve()
+    if not filepath.is_relative_to(base):
+        raise HTTPException(status_code=400, detail="Invalid path")
+    if not filepath.is_file() or filepath.suffix != ".jsonl":
+        raise HTTPException(status_code=404, detail="File not found")
+
+    try:
+        with open(filepath) as f:
+            # Skip lines we've already sent, count total
+            total = 0
+            events = []
+            for line in f:
+                total += 1
+                if total <= after:
+                    continue
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    events.append(json.loads(line))
+                except json.JSONDecodeError:
+                    events.append({"type": "error", "message": {"content": line}})
+    except (PermissionError, OSError) as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {"events": events, "total": total}
 
 
 app.mount("/static", StaticFiles(directory="static"), name="static")

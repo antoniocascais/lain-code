@@ -30,6 +30,10 @@ function formatCost(n) {
   return '$' + n.toFixed(2);
 }
 
+function shortModelName(m) {
+  return m.split('-').slice(1, 3).join('-');
+}
+
 function computeDateRange(preset) {
   const today = new Date();
   const fmt = d => d.toISOString().slice(0, 10);
@@ -188,12 +192,14 @@ function renderTable(sessions) {
     return state.sortDirection === 'asc' ? cmp : -cmp;
   });
 
+  state.sortedSessions = sorted;
+
   const tbody = document.getElementById('sessions-body');
-  tbody.innerHTML = sorted.map(s => `<tr>
+  tbody.innerHTML = sorted.map((s, i) => `<tr class="clickable-row" data-session-idx="${i}">
     <td>${esc(s.date || '-')}</td>
     <td>${esc(s.project || '-')}</td>
     <td class="title-cell" title="${esc(s.title || s.session_id)}">${esc(s.title || s.session_id.slice(0, 8))}</td>
-    <td class="models-cell">${Object.keys(s.models).map(m => esc(m.split('-').slice(1, 3).join('-'))).join(', ')}</td>
+    <td class="models-cell">${Object.keys(s.models).map(m => esc(shortModelName(m))).join(', ')}</td>
     <td class="num">${formatNumber(s.api_calls)}</td>
     <td class="num">${formatNumber(s.input_tokens)}</td>
     <td class="num">${formatNumber(s.output_tokens)}</td>
@@ -301,6 +307,14 @@ document.querySelectorAll('#sessions-table th').forEach(th => {
 
 document.getElementById('sidebar-toggle').addEventListener('click', () => {
   document.getElementById('sidebar').classList.toggle('open');
+});
+
+// Session panel — event delegation for table row clicks
+document.getElementById('sessions-body').addEventListener('click', e => {
+  const row = e.target.closest('.clickable-row');
+  if (!row) return;
+  const session = state.sortedSessions?.[parseInt(row.dataset.sessionIdx)];
+  if (session) openSessionPanel(session);
 });
 
 // Project search — respects claude toggle
