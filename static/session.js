@@ -1,10 +1,16 @@
 /* Session detail panel — event timeline viewer for individual sessions. */
 
+const SP_POLL_BASE_MS = 2000;
+const SP_POLL_MAX_MS = 30000;
+
 const sessionPanel = {
   file: '',
   lastCount: 0,
   allEvents: [],
   pollTimer: null,
+  pollInterval: SP_POLL_BASE_MS,
+  emptyPolls: 0,
+  isPolling: false,
 };
 
 // DOM refs — cached once at parse time
@@ -167,13 +173,24 @@ function spUpdateSummary() {
      <span class="sp-stat">${sessionPanel.allEvents.length} total events</span>`;
 }
 
+function spSchedulePoll() {
+  if (sessionPanel.pollTimer) clearInterval(sessionPanel.pollTimer);
+  sessionPanel.pollTimer = setInterval(spPoll, sessionPanel.pollInterval);
+}
+
 async function spPoll() {
-  if (!sessionPanel.file) return;
+  if (!sessionPanel.file || sessionPanel.isPolling) return;
+  sessionPanel.isPolling = true;
   try {
     const res = await fetch(`/api/session/events?file=${encodeURIComponent(sessionPanel.file)}&after=${sessionPanel.lastCount}`);
     if (!res.ok) return;
     const data = await res.json();
     if (data.events && data.events.length > 0) {
+      if (sessionPanel.pollInterval !== SP_POLL_BASE_MS) {
+        sessionPanel.pollInterval = SP_POLL_BASE_MS;
+        sessionPanel.emptyPolls = 0;
+        spSchedulePoll();
+      }
       for (const ev of data.events) {
         sessionPanel.allEvents.push(ev);
         const html = spRenderEvent(ev, sessionPanel.allEvents.length - 1);
@@ -185,14 +202,28 @@ async function spPoll() {
       if (spEl.autoScroll.checked) {
         spEl.events.scrollTop = spEl.events.scrollHeight;
       }
+    } else {
+      sessionPanel.emptyPolls = Math.min(sessionPanel.emptyPolls + 1, 4);
+      const next = Math.min(SP_POLL_BASE_MS * Math.pow(2, sessionPanel.emptyPolls), SP_POLL_MAX_MS);
+      if (next !== sessionPanel.pollInterval) {
+        sessionPanel.pollInterval = next;
+        spSchedulePoll();
+      }
     }
-  } catch (e) { console.error('Session poll error:', e); }
+  } catch (e) {
+    console.error('Session poll error:', e);
+  } finally {
+    sessionPanel.isPolling = false;
+  }
 }
 
 function openSessionPanel(session) {
   sessionPanel.file = session.filepath;
   sessionPanel.lastCount = 0;
   sessionPanel.allEvents = [];
+  sessionPanel.pollInterval = SP_POLL_BASE_MS;
+  sessionPanel.emptyPolls = 0;
+  sessionPanel.isPolling = false;
   spEl.events.innerHTML = '';
   spEl.autoScroll.checked = true;
   spEl.showThinking.checked = false;
@@ -206,9 +237,8 @@ function openSessionPanel(session) {
   spEl.panel.classList.add('open');
   spEl.overlay.classList.add('open');
 
-  if (sessionPanel.pollTimer) clearInterval(sessionPanel.pollTimer);
   spPoll();
-  sessionPanel.pollTimer = setInterval(spPoll, 2000);
+  spSchedulePoll();
 }
 
 function closeSessionPanel() {

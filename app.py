@@ -271,6 +271,7 @@ def get_stats(
 def get_session_events(
     file: str = Query(..., description="JSONL file path relative to data dir"),
     after: int = Query(0, description="Return events after this line number"),
+    limit: int = Query(500, description="Max events to return per request"),
 ):
     base = Path(DATA_DIR).resolve()
     filepath = (base / file).resolve()
@@ -281,13 +282,15 @@ def get_session_events(
 
     try:
         with open(filepath) as f:
-            # Skip lines we've already sent, count total
             total = 0
             events = []
             for line in f:
                 total += 1
                 if total <= after:
                     continue
+                if len(events) >= limit:
+                    total -= 1  # cursor = last processed line
+                    break
                 line = line.strip()
                 if not line:
                     continue
@@ -295,8 +298,8 @@ def get_session_events(
                     events.append(json.loads(line))
                 except json.JSONDecodeError:
                     events.append({"type": "error", "message": {"content": line}})
-    except (PermissionError, OSError) as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except (PermissionError, OSError):
+        raise HTTPException(status_code=500, detail="Failed to read session file")
 
     return {"events": events, "total": total}
 
