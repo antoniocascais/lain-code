@@ -195,11 +195,27 @@ def get_projects():
     return projects
 
 
+def _normalize_bound(s: str, *, is_end: bool = False) -> str:
+    """Pad a datetime boundary for inclusive lexicographic comparison.
+
+    Start: '2025-01-15T09:00' → '2025-01-15T09:00:00'
+    End:   '2025-01-15T17:30' → '2025-01-15T17:30:59.999Z'
+    Date-only and empty strings pass through unchanged.
+    """
+    if not s or "T" not in s:
+        return s
+    if len(s) == 16:  # YYYY-MM-DDTHH:MM
+        s += ":59.999Z" if is_end else ":00"
+    elif is_end and not s.endswith("Z"):
+        s += "Z"
+    return s
+
+
 @app.get("/api/stats")
 def get_stats(
     projects: str = Query("", description="Comma-separated folder names"),
-    start: str = Query("", description="Start date YYYY-MM-DD"),
-    end: str = Query("", description="End date YYYY-MM-DD"),
+    start: str = Query("", description="Start date or datetime (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)"),
+    end: str = Query("", description="End date or datetime (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)"),
 ):
     base = Path(DATA_DIR)
     if not base.exists():
@@ -207,6 +223,8 @@ def get_stats(
                 "cache_read_tokens": 0, "cache_create_tokens": 0, "models": {},
                 "files_scanned": 0, "cost": 0, "sessions_list": []}
     selected = set(projects.split(",")) if projects else set()
+    norm_start = _normalize_bound(start)
+    norm_end = _normalize_bound(end, is_end=True)
 
     total_models = defaultdict(int)
     total_input = 0
@@ -234,10 +252,20 @@ def get_stats(
             if not session:
                 continue
 
-            if start and session["date"] and session["date"] < start:
-                continue
-            if end and session["date"] and session["date"] > end:
-                continue
+            if norm_start:
+                if "T" in norm_start:
+                    if session["first_ts"] and session["first_ts"] < norm_start:
+                        continue
+                else:
+                    if session["date"] and session["date"] < norm_start:
+                        continue
+            if norm_end:
+                if "T" in norm_end:
+                    if session["first_ts"] and session["first_ts"] > norm_end:
+                        continue
+                else:
+                    if session["date"] and session["date"] > norm_end:
+                        continue
 
             for model, count in session["models"].items():
                 total_models[model] += count

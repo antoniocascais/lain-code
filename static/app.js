@@ -3,6 +3,8 @@ const state = {
   datePreset: 'today',
   customStart: '',
   customEnd: '',
+  customStartTime: '00:00',
+  customEndTime: '23:59',
   sortColumn: 'date',
   sortDirection: 'desc',
   projectsData: {},
@@ -36,6 +38,11 @@ function shortModelName(m) {
   return m.split('-').slice(1, 3).join('-');
 }
 
+function localToUTC(dateStr, timeStr) {
+  const dt = new Date(`${dateStr}T${timeStr}:00`);
+  return dt.toISOString().slice(0, 19);
+}
+
 function computeDateRange(preset) {
   const today = new Date();
   const fmt = d => d.toISOString().slice(0, 10);
@@ -57,8 +64,17 @@ function computeDateRange(preset) {
       d.setDate(d.getDate() - 29);
       return { start: fmt(d), end: fmt(today) };
     }
-    case 'custom':
-      return { start: state.customStart, end: state.customEnd };
+    case 'custom': {
+      let start = state.customStart;
+      let end = state.customEnd;
+      if (start && state.customStartTime) {
+        start = localToUTC(start, state.customStartTime);
+      }
+      if (end && state.customEndTime) {
+        end = localToUTC(end, state.customEndTime);
+      }
+      return { start, end };
+    }
     default:
       return { start: '', end: '' };
   }
@@ -298,6 +314,8 @@ document.querySelectorAll('.preset-btn').forEach(btn => {
 document.getElementById('apply-dates').addEventListener('click', () => {
   state.customStart = document.getElementById('date-start').value;
   state.customEnd = document.getElementById('date-end').value;
+  state.customStartTime = document.getElementById('time-start').value || '00:00';
+  state.customEndTime = document.getElementById('time-end').value || '23:59';
   fetchStats();
 });
 

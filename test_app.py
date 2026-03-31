@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from hypothesis import given, strategies as st
 
-from app import friendly_name, estimate_cost, parse_session, app
+from app import friendly_name, estimate_cost, parse_session, _normalize_bound, app
 
 
 # ---------------------------------------------------------------------------
@@ -328,6 +328,94 @@ class TestStatsAPI:
         data = r.json()
         assert data["sessions"] == 0
 
+    def test_stats_datetime_filter_includes(self):
+        """Session at 09:00 should be included when time range covers it."""
+        r = self.client.get("/api/stats", params={
+            "start": "2025-01-15T08:00:00", "end": "2025-01-15T10:00:00",
+        })
+        data = r.json()
+        assert data["sessions"] == 1
+
+    def test_stats_datetime_filter_excludes(self):
+        """Session at 09:00 should be excluded when time range is later."""
+        r = self.client.get("/api/stats", params={
+            "start": "2025-01-15T10:00:00", "end": "2025-01-15T12:00:00",
+        })
+        data = r.json()
+        assert data["sessions"] == 0
+
+    def test_stats_datetime_start_only(self):
+        """Datetime start without end should work."""
+        r = self.client.get("/api/stats", params={"start": "2025-01-15T08:00:00"})
+        data = r.json()
+        assert data["sessions"] == 1
+
+        r = self.client.get("/api/stats", params={"start": "2025-01-15T10:00:00"})
+        data = r.json()
+        assert data["sessions"] == 0
+
+    def test_stats_datetime_end_only(self):
+        """Datetime end without start should work."""
+        r = self.client.get("/api/stats", params={"end": "2025-01-15T10:00:00"})
+        data = r.json()
+        assert data["sessions"] == 1
+
+        r = self.client.get("/api/stats", params={"end": "2025-01-15T08:00:00"})
+        data = r.json()
+        assert data["sessions"] == 0
+
+    def test_stats_mixed_date_and_datetime(self):
+        """Date-only start with datetime end should work."""
+        r = self.client.get("/api/stats", params={
+            "start": "2025-01-15", "end": "2025-01-15T08:00:00",
+        })
+        data = r.json()
+        assert data["sessions"] == 0  # session at 09:00, end at 08:00
+
+    def test_stats_datetime_boundary_inclusive(self):
+        """Session at exactly 09:00 should be included when end is 09:00."""
+        r = self.client.get("/api/stats", params={
+            "start": "2025-01-15T09:00", "end": "2025-01-15T09:00",
+        })
+        data = r.json()
+        assert data["sessions"] == 1
+
+    def test_stats_datetime_boundary_excluded(self):
+        """Session at 09:00 excluded when end minute is 08:59."""
+        r = self.client.get("/api/stats", params={
+            "start": "2025-01-15T00:00", "end": "2025-01-15T08:59",
+        })
+        data = r.json()
+        assert data["sessions"] == 0
+
+    def test_stats_datetime_start_date_only_end(self):
+        """Datetime start + date-only end combo."""
+        r = self.client.get("/api/stats", params={
+            "start": "2025-01-15T08:00:00", "end": "2025-01-15",
+        })
+        data = r.json()
+        assert data["sessions"] == 1
+
+    def test_stats_null_timestamp_passes_datetime_filter(
+        self, tmp_path, assistant_record,
+    ):
+        """Sessions with no timestamp should not be excluded by datetime filters."""
+        import app as app_module
+        project = self.data_dir / "proj2"
+        project.mkdir()
+        rec = assistant_record()
+        del rec["timestamp"]
+        p = project / "notimestamp.jsonl"
+        with open(p, "w") as f:
+            f.write(json.dumps(rec) + "\n")
+
+        r = self.client.get("/api/stats", params={
+            "start": "2025-01-15T08:00:00", "end": "2025-01-15T10:00:00",
+        })
+        data = r.json()
+        # proj1 session (09:00) + proj2 session (no timestamp) = 2
+        assert data["sessions"] == 2
+
     def test_empty_data_dir(self, tmp_path):
         import app as app_module
         app_module.DATA_DIR = str(tmp_path / "empty")
@@ -335,3 +423,38 @@ class TestStatsAPI:
         data = r.json()
         assert data["sessions"] == 0
         assert data["cost"] == 0
+
+
+class TestNormalizeBound:
+    def test_empty_string(self):
+        assert _normalize_bound("") == ""
+        assert _normalize_bound("", is_end=True) == ""
+
+    def test_date_only_passthrough(self):
+        assert _normalize_bound("2025-01-15") == "2025-01-15"
+        assert _normalize_bound("2025-01-15", is_end=True) == "2025-01-15"
+
+    def test_start_pads_seconds(self):
+        assert _normalize_bound("2025-01-15T09:00") == "2025-01-15T09:00:00"
+
+    def test_end_pads_to_end_of_minute(self):
+        assert _normalize_bound("2025-01-15T17:30", is_end=True) == "2025-01-15T17:30:59.999Z"
+
+    def test_full_precision_start_unchanged(self):
+        assert _normalize_bound("2025-01-15T09:00:00") == "2025-01-15T09:00:00"
+
+    def test_full_precision_end_gets_z(self):
+        assert _normalize_bound("2025-01-15T17:30:00", is_end=True) == "2025-01-15T17:30:00Z"
+
+    def test_end_already_has_z(self):
+        assert _normalize_bound("2025-01-15T17:30:00Z", is_end=True) == "2025-01-15T17:30:00Z"
+
+    def test_millisecond_precision_passthrough(self):
+        """Already-precise timestamps should not be double-padded."""
+        assert _normalize_bound("2025-01-15T09:00:00.123Z") == "2025-01-15T09:00:00.123Z"
+        assert _normalize_bound("2025-01-15T09:00:00.123Z", is_end=True) == "2025-01-15T09:00:00.123Z"
+
+    def test_start_never_appends_z(self):
+        """Start bounds should never get Z suffix — keeps comparison tight."""
+        result = _normalize_bound("2025-01-15T09:00")
+        assert not result.endswith("Z")

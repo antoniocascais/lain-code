@@ -361,7 +361,8 @@ body.sidebar-resizing {
   gap: 4px;
 }
 
-.date-custom input[type="date"] {
+.date-custom input[type="date"],
+.date-custom input[type="time"] {
   background: var(--bg-primary);
   border: 1px solid var(--border);
   color: var(--text-primary);
