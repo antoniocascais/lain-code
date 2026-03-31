@@ -1,11 +1,24 @@
 services:
   lain:
-    build: .
+    build:
+      context: .
+      target: base
     container_name: lain-code
+    cap_add:
+      - NET_ADMIN
     user: "${UID:-1000}:${GID:-1000}"
     ports:
       - "8000:8000"
     environment:
       - LAIN_DATA_DIR=/data
+      - LAIN_CREDENTIALS=/tmp/.claude/.credentials.json
     volumes:
       - ${CLAUDE_PROJECTS:-~/.claude/projects}:/data:ro
+      # If host file doesn't exist, Docker creates a directory mount — entrypoint handles this gracefully
+      - ${CLAUDE_CREDENTIALS:-~/.claude/.credentials.json}:/credentials/.credentials.json:ro
+
+  test:
+    build:
+      context: .
+      target: test
+    profiles: ["test"]

@@ -218,6 +218,7 @@ async function spPoll() {
 }
 
 function openSessionPanel(session) {
+  if (typeof closeAnalyzePanel === 'function') closeAnalyzePanel();
   sessionPanel.file = session.filepath;
   sessionPanel.lastCount = 0;
   sessionPanel.allEvents = [];
@@ -252,13 +253,16 @@ function closeSessionPanel() {
 
 // Event listeners
 document.getElementById('session-panel-close').addEventListener('click', closeSessionPanel);
-spEl.overlay.addEventListener('click', closeSessionPanel);
+spEl.overlay.addEventListener('click', () => {
+  if (spEl.panel.classList.contains('open')) closeSessionPanel();
+  else if (typeof closeAnalyzePanel === 'function') closeAnalyzePanel();
+});
 spEl.filterType.addEventListener('change', spApplyFilters);
 spEl.showThinking.addEventListener('change', spApplyFilters);
 spEl.showToolResults.addEventListener('change', spApplyFilters);
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && spEl.panel.classList.contains('open')) {
-    closeSessionPanel();
-  }
+  if (e.key !== 'Escape') return;
+  if (spEl.panel.classList.contains('open')) closeSessionPanel();
+  else if (typeof closeAnalyzePanel === 'function') closeAnalyzePanel();
 });
