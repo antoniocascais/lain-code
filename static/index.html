@@ -49,6 +49,7 @@
         <button class="preset-btn" data-preset="30d">30d</button>
         <button class="preset-btn" data-preset="custom">Custom</button>
       </div>
+      <button class="analyze-btn" id="analyze-btn" style="display:none" disabled title="Select sessions to analyze">Analyze</button>
       <div class="date-custom" id="date-custom">
         <label>From <input type="date" id="date-start"></label>
         <label>To <input type="date" id="date-end"></label>
@@ -93,16 +94,17 @@
           <table id="sessions-table">
             <thead>
               <tr>
+                <th class="th-select"><input type="checkbox" id="select-all-sessions" title="Select all"></th>
                 <th data-col="date">Date <span class="sort-arrow"></span></th>
                 <th data-col="project">Project <span class="sort-arrow"></span></th>
                 <th data-col="title">Title <span class="sort-arrow"></span></th>
                 <th data-col="models">Models <span class="sort-arrow"></span></th>
-                <th data-col="api_calls">API Calls <span class="sort-arrow"></span></th>
-                <th data-col="input_tokens">Input <span class="sort-arrow"></span></th>
-                <th data-col="output_tokens">Output <span class="sort-arrow"></span></th>
-                <th data-col="cache_read_tokens">Cache Read <span class="sort-arrow"></span></th>
-                <th data-col="cache_create_tokens">Cache Create <span class="sort-arrow"></span></th>
-                <th data-col="cost">API Value <span class="sort-arrow"></span></th>
+                <th class="num" data-col="api_calls">API Calls <span class="sort-arrow"></span></th>
+                <th class="num" data-col="input_tokens">Input <span class="sort-arrow"></span></th>
+                <th class="num" data-col="output_tokens">Output <span class="sort-arrow"></span></th>
+                <th class="num" data-col="cache_read_tokens">Cache Read <span class="sort-arrow"></span></th>
+                <th class="num" data-col="cache_create_tokens">Cache Create <span class="sort-arrow"></span></th>
+                <th class="num" data-col="cost">API Value <span class="sort-arrow"></span></th>
               </tr>
             </thead>
             <tbody id="sessions-body"></tbody>
@@ -111,6 +113,18 @@
       </div>
     </div>
   </main>
+
+  <!-- Analyze panel -->
+  <div class="analyze-panel" id="analyze-panel">
+    <div class="analyze-panel-header">
+      <button class="session-panel-close" id="analyze-panel-close">&times;</button>
+      <div class="session-panel-title">
+        <span class="session-panel-name">Workflow Analysis</span>
+        <span class="session-panel-meta" id="analyze-meta"></span>
+      </div>
+    </div>
+    <div class="analyze-content" id="analyze-content"></div>
+  </div>
 
   <!-- Session detail side panel -->
   <div class="session-panel" id="session-panel">
@@ -138,7 +152,10 @@
   <div class="session-panel-overlay" id="session-panel-overlay"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
   <script src="/static/app.js"></script>
   <script src="/static/session.js"></script>
+  <script src="/static/analyze.js"></script>
 </body>
 </html>

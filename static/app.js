@@ -8,6 +8,8 @@ const state = {
   projectsData: {},
   statsData: null,
   chart: null,
+  selectedSessions: new Set(),
+  analyzeAvailable: false,
 };
 
 const CHART_COLORS = ['#00ff41', '#e63946', '#ffa500', '#00d4ff', '#ff00ff', '#ffff00', '#7b68ee', '#ff6b6b'];
@@ -194,8 +196,15 @@ function renderTable(sessions) {
 
   state.sortedSessions = sorted;
 
+  // Clear selection on re-render (sort/filter changes indices)
+  state.selectedSessions.clear();
+  updateAnalyzeButton();
+  const selectAllCb = document.getElementById('select-all-sessions');
+  if (selectAllCb) selectAllCb.checked = false;
+
   const tbody = document.getElementById('sessions-body');
   tbody.innerHTML = sorted.map((s, i) => `<tr class="clickable-row" data-session-idx="${i}">
+    <td class="td-select"><input type="checkbox" class="session-select" data-idx="${i}"></td>
     <td>${esc(s.date || '-')}</td>
     <td>${esc(s.project || '-')}</td>
     <td class="title-cell" title="${esc(s.title || s.session_id)}">${esc(s.title || s.session_id.slice(0, 8))}</td>
@@ -311,11 +320,42 @@ document.getElementById('sidebar-toggle').addEventListener('click', () => {
 
 // Session panel — event delegation for table row clicks
 document.getElementById('sessions-body').addEventListener('click', e => {
+  // Don't open session panel when clicking checkboxes
+  if (e.target.classList.contains('session-select')) {
+    const idx = parseInt(e.target.dataset.idx);
+    if (e.target.checked) {
+      state.selectedSessions.add(idx);
+    } else {
+      state.selectedSessions.delete(idx);
+    }
+    updateAnalyzeButton();
+    return;
+  }
   const row = e.target.closest('.clickable-row');
   if (!row) return;
   const session = state.sortedSessions?.[parseInt(row.dataset.sessionIdx)];
   if (session) openSessionPanel(session);
 });
+
+// Select-all checkbox for sessions
+document.getElementById('select-all-sessions').addEventListener('change', e => {
+  const checked = e.target.checked;
+  state.selectedSessions.clear();
+  document.querySelectorAll('.session-select').forEach(cb => {
+    cb.checked = checked;
+    if (checked) state.selectedSessions.add(parseInt(cb.dataset.idx));
+  });
+  updateAnalyzeButton();
+});
+
+function updateAnalyzeButton() {
+  const btn = document.getElementById('analyze-btn');
+  if (!state.analyzeAvailable) return;
+  const n = state.selectedSessions.size;
+  btn.disabled = n === 0;
+  btn.textContent = n > 0 ? `Analyze (${n})` : 'Analyze';
+  btn.title = n === 0 ? 'Select sessions to analyze' : `Analyze ${n} session${n > 1 ? 's' : ''}`;
+}
 
 // Project search — respects claude toggle
 document.getElementById('project-search').addEventListener('input', (e) => {
@@ -374,6 +414,12 @@ document.getElementById('theme-toggle').addEventListener('click', () => {
     document.body.classList.remove('sidebar-resizing');
   });
 })();
+
+// Check analyze availability
+fetch('/api/analyze/status').then(r => r.json()).then(data => {
+  state.analyzeAvailable = data.available;
+  if (data.available) document.getElementById('analyze-btn').style.display = '';
+}).catch(() => {});
 
 // Init
 fetchProjects().then(() => fetchStats());

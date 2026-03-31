@@ -1,9 +1,12 @@
 ARGS ?=
 
-.PHONY: build serve run stop logs clean test
+.PHONY: build rebuild serve run stop logs clean test
 
 build:
 	docker compose build
+
+rebuild:
+	docker compose build --no-cache
 
 serve:
 	docker compose up -d
@@ -18,7 +21,9 @@ logs:
 	docker compose logs -f
 
 test:
-	docker compose run --rm lain python -m pytest test_pricing.py -v
+	docker compose run --rm --build test
 
 clean:
 	docker compose down --rmi local
+
+all: stop build test serve

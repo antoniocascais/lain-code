@@ -1,5 +1,7 @@
 """lain-code: FastAPI backend for Claude Code session analytics."""
 
+import asyncio
+import logging
 import os
 import json
 from collections import defaultdict
@@ -7,7 +9,10 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from pydantic import BaseModel
+
+from analyze_sessions import run_patterns, run_stats, build_analysis_prompt, parse_all
 
 app = FastAPI()
 
@@ -31,9 +36,9 @@ MODEL_PRICING = {
 }
 FALLBACK_PRICING = (3, 15, 0.3, 3.75)
 
-def _read_cwd_from_jsonl(project_dir: Path) -> str | None:
+def _read_cwd_from_jsonl(files: list[Path]) -> str | None:
     """Read the cwd from the first JSONL entry that has one."""
-    for f in project_dir.rglob("*.jsonl"):
+    for f in files:
         try:
             with open(f) as fh:
                 for line in fh:
@@ -181,7 +186,7 @@ def get_projects():
         if not jsonl_files:
             continue
         folder = d.name
-        cwd = _read_cwd_from_jsonl(d)
+        cwd = _read_cwd_from_jsonl(jsonl_files)
         projects[folder] = {
             "folder": folder,
             "name": friendly_name(cwd, folder),
@@ -219,10 +224,11 @@ def get_stats(
         if selected and folder not in selected:
             continue
 
-        cwd = _read_cwd_from_jsonl(d)
+        jsonl_files = list(d.rglob("*.jsonl"))
+        cwd = _read_cwd_from_jsonl(jsonl_files)
         display_name = friendly_name(cwd, folder)
 
-        for f in d.rglob("*.jsonl"):
+        for f in jsonl_files:
             files_scanned += 1
             session = parse_session(str(f))
             if not session:
@@ -267,6 +273,16 @@ def get_stats(
     }
 
 
+def _resolve_jsonl(base: Path, fp: str) -> Path:
+    """Resolve a relative path to a JSONL file under base, with traversal protection."""
+    resolved = (base / fp).resolve()
+    if not resolved.is_relative_to(base):
+        raise HTTPException(status_code=400, detail=f"Invalid path: {fp}")
+    if not resolved.is_file() or resolved.suffix != ".jsonl":
+        raise HTTPException(status_code=404, detail=f"File not found: {fp}")
+    return resolved
+
+
 @app.get("/api/session/events")
 def get_session_events(
     file: str = Query(..., description="JSONL file path relative to data dir"),
@@ -274,11 +290,7 @@ def get_session_events(
     limit: int = Query(500, description="Max events to return per request"),
 ):
     base = Path(DATA_DIR).resolve()
-    filepath = (base / file).resolve()
-    if not filepath.is_relative_to(base):
-        raise HTTPException(status_code=400, detail="Invalid path")
-    if not filepath.is_file() or filepath.suffix != ".jsonl":
-        raise HTTPException(status_code=404, detail="File not found")
+    filepath = _resolve_jsonl(base, file)
 
     try:
         with open(filepath) as f:
@@ -302,6 +314,77 @@ def get_session_events(
         raise HTTPException(status_code=500, detail="Failed to read session file")
 
     return {"events": events, "total": total}
+
+
+CREDENTIALS_PATH = os.environ.get(
+    "LAIN_CREDENTIALS",
+    os.path.expanduser("~/.claude/.credentials.json"),
+)
+
+
+@app.get("/api/analyze/status")
+def analyze_status():
+    if Path(CREDENTIALS_PATH).is_file():
+        return {"available": True}
+    return {"available": False, "reason": "Claude credentials not found"}
+
+
+class AnalyzeRequest(BaseModel):
+    filepaths: list[str]
+
+
+@app.post("/api/analyze")
+async def analyze_sessions(req: AnalyzeRequest):
+    if len(req.filepaths) > 20:
+        raise HTTPException(status_code=400, detail="Maximum 20 sessions")
+    if not req.filepaths:
+        raise HTTPException(status_code=400, detail="No sessions selected")
+
+    base = Path(DATA_DIR).resolve()
+    paths: list[Path] = []
+    for fp in req.filepaths:
+        paths.append(_resolve_jsonl(base, fp))
+
+    async def stream():
+        try:
+            parsed = await asyncio.to_thread(parse_all, paths)
+            patterns = await asyncio.to_thread(run_patterns, paths, _parsed=parsed)
+            stats = await asyncio.to_thread(run_stats, paths, _parsed=parsed)
+            prompt = build_analysis_prompt(patterns, stats)
+
+            try:
+                from claude_agent_sdk import query, ClaudeAgentOptions, ResultMessage
+                from claude_agent_sdk.types import StreamEvent
+
+                async for msg in query(
+                    prompt=prompt,
+                    options=ClaudeAgentOptions(
+                        permission_mode="bypassPermissions",
+                        max_turns=1,
+                        disallowed_tools=["Bash", "Write", "Edit", "Read", "Glob", "Grep"],
+                        include_partial_messages=True,
+                    ),
+                ):
+                    if isinstance(msg, StreamEvent):
+                        event = msg.event
+                        if event.get("type") == "content_block_delta":
+                            delta = event.get("delta", {})
+                            if delta.get("type") == "text_delta":
+                                text = delta.get("text", "")
+                                yield f"event: token\ndata: {json.dumps(text)}\n\n"
+                    elif isinstance(msg, ResultMessage):
+                        yield "event: done\ndata: {}\n\n"
+
+            except ImportError as exc:
+                yield f"event: token\ndata: {json.dumps(f'[claude-agent-sdk not available: {exc}]\\n\\n')}\n\n"
+                yield f"event: token\ndata: {json.dumps(prompt)}\n\n"
+                yield "event: done\ndata: {}\n\n"
+
+        except Exception as e:
+            logging.exception("Analyze stream error")
+            yield f"event: error\ndata: {json.dumps({'message': 'Analysis failed'})}\n\n"
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
 
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
