@@ -21,6 +21,9 @@ DATA_DIR = os.environ.get("LAIN_DATA_DIR", os.path.expanduser("~/.claude/project
 # Per 1M tokens: (input, output, cache_read, cache_create)
 # Source: https://docs.anthropic.com/en/docs/about-claude/models#model-pricing
 MODEL_PRICING = {
+    "claude-fable-5":    (10,   50, 1.0,  12.5),
+    "claude-opus-4-8":   (5,    25, 0.5,  6.25),
+    "claude-opus-4-7":   (5,    25, 0.5,  6.25),
     "claude-opus-4-6":   (5,    25, 0.5,  6.25),
     "claude-opus-4-5":   (5,    25, 0.5,  6.25),
     "claude-opus-4-1":   (15,   75, 1.5,  18.75),
@@ -83,7 +86,8 @@ def _lookup_pricing(model: str):
     """Match model ID to pricing, stripping date suffixes if needed."""
     if model in MODEL_PRICING:
         return MODEL_PRICING[model]
-    for key in MODEL_PRICING:
+    # Longest key first so "claude-opus-4-N" can't fall through to "claude-opus-4".
+    for key in sorted(MODEL_PRICING, key=len, reverse=True):
         if model.startswith(key):
             return MODEL_PRICING[key]
     return FALLBACK_PRICING

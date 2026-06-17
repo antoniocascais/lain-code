@@ -6,6 +6,7 @@ from app import _lookup_pricing, MODEL_PRICING, FALLBACK_PRICING
 
 # Dated IDs actually seen in JSONL data → expected base key
 DATED_IDS = [
+    ("claude-opus-4-7-20260201",   "claude-opus-4-7"),
     ("claude-opus-4-5-20251101",   "claude-opus-4-5"),
     ("claude-sonnet-4-5-20250929", "claude-sonnet-4-5"),
     ("claude-sonnet-4-20250514",   "claude-sonnet-4"),
@@ -39,6 +40,32 @@ def test_prefix_match_prefers_longer_key():
     result = _lookup_pricing("claude-opus-4-5-20251101")
     assert result == MODEL_PRICING["claude-opus-4-5"]
     assert result != MODEL_PRICING.get("claude-opus-4")
+
+
+def test_opus_4_7_not_billed_as_opus_4():
+    """Opus 4.7 at $5/$25 must not fall through to Opus 4 at $15/$75."""
+    result = _lookup_pricing("claude-opus-4-7")
+    assert result == MODEL_PRICING["claude-opus-4-7"]
+    assert result != MODEL_PRICING["claude-opus-4"]
+
+
+def test_opus_4_8_not_billed_as_opus_4():
+    """Opus 4.8 at $5/$25 must not fall through to Opus 4 at $15/$75."""
+    result = _lookup_pricing("claude-opus-4-8")
+    assert result == MODEL_PRICING["claude-opus-4-8"]
+    assert result != MODEL_PRICING["claude-opus-4"]
+
+
+def test_opus_4_8_1m_suffix_resolves_to_base():
+    """The `[1m]` context-window suffix must prefix-match the base key."""
+    assert _lookup_pricing("claude-opus-4-8[1m]") == MODEL_PRICING["claude-opus-4-8"]
+
+
+def test_fable_5_not_billed_as_fallback():
+    """Fable 5 at $10/$50 must resolve to its own entry, not the Sonnet fallback."""
+    result = _lookup_pricing("claude-fable-5")
+    assert result == MODEL_PRICING["claude-fable-5"]
+    assert result != FALLBACK_PRICING
 
 
 def test_prefix_match_does_not_overshoot():
