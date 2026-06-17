@@ -1,6 +1,6 @@
 ARGS ?=
 
-.PHONY: build rebuild serve run stop logs clean test
+.PHONY: build rebuild serve run stop logs clean test test-py test-js
 
 build:
 	docker compose build
@@ -20,8 +20,13 @@ stop:
 logs:
 	docker compose logs -f
 
-test:
+test: test-js test-py
+
+test-py:
 	docker compose run --rm --build test
+
+test-js:
+	node --test 'static/**/*.test.js'
 
 clean:
 	docker compose down --rmi local

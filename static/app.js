@@ -34,10 +34,6 @@ function formatCost(n) {
   return '$' + n.toFixed(2);
 }
 
-function shortModelName(m) {
-  return m.split('-').slice(1, 3).join('-');
-}
-
 function localToUTC(dateStr, timeStr) {
   const dt = new Date(`${dateStr}T${timeStr}:00`);
   return dt.toISOString().slice(0, 19);
