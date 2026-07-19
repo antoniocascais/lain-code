@@ -5,6 +5,7 @@ import logging
 import os
 import json
 from collections import defaultdict
+from datetime import date
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
@@ -19,25 +20,46 @@ app = FastAPI()
 DATA_DIR = os.environ.get("LAIN_DATA_DIR", os.path.expanduser("~/.claude/projects"))
 
 # Per 1M tokens: (input, output, cache_read, cache_create)
-# Source: https://docs.anthropic.com/en/docs/about-claude/models#model-pricing
+# Source: https://platform.claude.com/docs/en/about-claude/pricing (checked 2026-07-19)
 MODEL_PRICING = {
-    "claude-fable-5":    (10,   50, 1.0,  12.5),
-    "claude-opus-4-8":   (5,    25, 0.5,  6.25),
-    "claude-opus-4-7":   (5,    25, 0.5,  6.25),
-    "claude-opus-4-6":   (5,    25, 0.5,  6.25),
-    "claude-opus-4-5":   (5,    25, 0.5,  6.25),
-    "claude-opus-4-1":   (15,   75, 1.5,  18.75),
-    "claude-opus-4":     (15,   75, 1.5,  18.75),
-    "claude-sonnet-4-6": (3,    15, 0.3,  3.75),
-    "claude-sonnet-4-5": (3,    15, 0.3,  3.75),
-    "claude-sonnet-4":   (3,    15, 0.3,  3.75),
-    "claude-sonnet-3-7": (3,    15, 0.3,  3.75),
-    "claude-haiku-4-5":  (1,     5, 0.1,  1.25),
-    "claude-haiku-3-5":  (0.8,   4, 0.08, 1.0),
-    "claude-opus-3":     (15,   75, 1.5,  18.75),
-    "claude-haiku-3":    (0.25, 1.25, 0.03, 0.3),
+    "claude-fable-5":         (10,   50,   1.0,  12.5),
+    "claude-mythos-5":        (10,   50,   1.0,  12.5),
+    "claude-mythos-preview":  (10,   50,   1.0,  12.5),
+    "claude-opus-4-8":        (5,    25,   0.5,  6.25),
+    "claude-opus-4-7":        (5,    25,   0.5,  6.25),
+    "claude-opus-4-6":        (5,    25,   0.5,  6.25),
+    "claude-opus-4-5":        (5,    25,   0.5,  6.25),
+    "claude-opus-4-1":        (15,   75,   1.5,  18.75),
+    "claude-opus-4":          (15,   75,   1.5,  18.75),
+    "claude-sonnet-4-6":      (3,    15,   0.3,  3.75),
+    "claude-sonnet-4-5":      (3,    15,   0.3,  3.75),
+    "claude-sonnet-4":        (3,    15,   0.3,  3.75),
+    "claude-sonnet-3-7":      (3,    15,   0.3,  3.75),
+    "claude-haiku-4-5":       (1,     5,   0.1,  1.25),
+    "claude-haiku-3-5":       (0.8,   4,   0.08, 1.0),
+    "claude-opus-3":          (15,   75,   1.5,  18.75),
+    "claude-haiku-3":         (0.25,  1.25, 0.03, 0.3),
 }
 FALLBACK_PRICING = (3, 15, 0.3, 3.75)
+
+# Models whose rate changes on a date. Entries are (effective_from, prices) in
+# ascending date order; the last entry on or before the session date wins.
+SCHEDULED_PRICING = {
+    "claude-sonnet-5": [
+        ("",           (2, 10, 0.20, 2.50)),  # introductory, through 2026-08-31
+        ("2026-09-01", (3, 15, 0.30, 3.75)),
+    ],
+}
+
+# Claude Code sometimes logs a bare alias instead of a full model ID. These
+# track the current generation — update when the default model moves.
+ALIASES = {
+    "opus":   "claude-opus-4-8",
+    "sonnet": "claude-sonnet-5",
+    "haiku":  "claude-haiku-4-5",
+    "fable":  "claude-fable-5",
+}
+
 
 def _read_cwd_from_jsonl(files: list[Path]) -> str | None:
     """Read the cwd from the first JSONL entry that has one."""
@@ -82,19 +104,40 @@ def friendly_name(cwd: str | None, folder: str) -> str:
     return path or folder
 
 
-def _lookup_pricing(model: str):
-    """Match model ID to pricing, stripping date suffixes if needed."""
+def _resolve_schedule(key: str, when: str | None):
+    """Pick the rate in effect for `key` on ISO date `when` (default: today)."""
+    when = when or date.today().isoformat()
+    prices = SCHEDULED_PRICING[key][0][1]
+    for effective_from, scheduled in SCHEDULED_PRICING[key]:
+        if effective_from <= when:
+            prices = scheduled
+    return prices
+
+
+def _lookup_pricing(model: str, when: str | None = None):
+    """Match model ID to pricing, stripping date suffixes if needed.
+
+    `when` is the session's ISO date — models with introductory pricing must be
+    billed at the rate in effect when the session ran, not today's rate.
+    """
+    model = ALIASES.get(model, model)
+    if model in SCHEDULED_PRICING:
+        return _resolve_schedule(model, when)
     if model in MODEL_PRICING:
         return MODEL_PRICING[model]
     # Longest key first so "claude-opus-4-N" can't fall through to "claude-opus-4".
-    for key in sorted(MODEL_PRICING, key=len, reverse=True):
+    keys = list(MODEL_PRICING) + list(SCHEDULED_PRICING)
+    for key in sorted(keys, key=len, reverse=True):
         if model.startswith(key):
+            if key in SCHEDULED_PRICING:
+                return _resolve_schedule(key, when)
             return MODEL_PRICING[key]
     return FALLBACK_PRICING
 
 
-def estimate_cost(input_t: int, output_t: int, cache_read: int, cache_create: int, model: str) -> float:
-    p = _lookup_pricing(model)
+def estimate_cost(input_t: int, output_t: int, cache_read: int, cache_create: int,
+                  model: str, when: str | None = None) -> float:
+    p = _lookup_pricing(model, when)
     return (
         input_t * p[0] / 1_000_000
         + output_t * p[1] / 1_000_000
@@ -157,7 +200,9 @@ def parse_session(filepath: str) -> dict | None:
         return None
 
     dominant_model = max(models, key=models.get)
-    cost = estimate_cost(input_tokens, output_tokens, cache_read, cache_create, dominant_model)
+    session_date = first_ts[:10] if first_ts else None
+    cost = estimate_cost(input_tokens, output_tokens, cache_read, cache_create,
+                         dominant_model, when=session_date)
 
     return {
         "session_id": session_id or Path(filepath).stem,
